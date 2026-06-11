@@ -8,14 +8,19 @@ export function middleware(request: NextRequest) {
   // Dominio raíz en desarrollo y producción
   const rootDomain = process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'localhost:3000'
 
-  // Extraer el subdominio
-  const subdomain = hostname
+  // Extraer el subdominio limpiando de forma segura
+  let subdomain = hostname
     .replace(`.${rootDomain}`, '')
     .replace(rootDomain, '')
 
-  // Si no hay subdominio o es www → landing page principal
-  if (!subdomain || subdomain === hostname || subdomain === 'www') {
-    return NextResponse.next()
+  // REGLA DE ORO: Si entramos directo al dominio principal (sin subdominio real delante)
+  if (!subdomain || hostname === rootDomain || subdomain === 'www') {
+    // Si querés que al entrar a debotz.vercel.app cargue por defecto el menú de sushiblue de prueba:
+    url.pathname = `/sushiblue/menu`
+    return NextResponse.rewrite(url)
+    
+    // NOTA: Si en el futuro creás una landing page en app/page.tsx, cambiá las 2 líneas de arriba por:
+    // return NextResponse.next()
   }
 
   // Si es el subdominio "admin" → panel super admin de Debot (vos)
@@ -24,7 +29,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.rewrite(url)
   }
 
-  // Cualquier otro subdominio → panel del local
+  // Cualquier otro subdominio (ej: sushiblue) → panel del local
   url.pathname = `/${subdomain}${url.pathname}`
   return NextResponse.rewrite(url)
 }
