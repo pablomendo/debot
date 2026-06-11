@@ -2,16 +2,17 @@ import { supabaseAdmin } from "@/lib/supabase"
 import { notFound } from "next/navigation"
 
 interface PageProps {
-  params: {
+  params: Promise<{
     subdomain: string
     vista: string
-  }
+  }>
 }
 
 export default async function MenuPage({ params }: PageProps) {
-  const { subdomain, vista } = params
+  // Desempaquetamos los params de forma asíncrona para cumplir con Next.js moderno
+  const { subdomain, vista } = await params
 
-  // 1. Validamos la URL. Si entran a algo que no sea /menu o /catalogo, tiramos 404 por ahora
+  // 1. Validamos la URL. Si entran a algo que no sea /menu o /catalogo, tiramos 404
   if (vista !== "menu" && vista !== "catalogo") {
     notFound()
   }
@@ -52,20 +53,24 @@ export default async function MenuPage({ params }: PageProps) {
       className="min-h-screen text-white font-sans selection:bg-cyan-500 selection:text-black"
     >
       {/* HEADER PREMIUM */}
-      <header className="sticky top-0 z-50 backdrop-blur-md bg-opacity-80 border-b border-white/10 p-4" style={{ backgroundColor: `${bgPrimario}CD` }}>
+      <header 
+        sticky-element="true"
+        style={{ backgroundColor: `${bgPrimario}CD` }}
+        className="sticky top-0 z-50 backdrop-blur-md bg-opacity-80 border-b border-white/10 p-4" 
+      >
         <div className="max-w-md mx-auto flex flex-col items-center justify-center">
           <h1 className="text-2xl font-black tracking-widest uppercase" style={{ color: acentoNeon }}>
             {local.nombre_comercial}
           </h1>
           <p className="text-[10px] tracking-widest text-zinc-400 uppercase mt-0.5">Experience & Delivery</p>
           
-          <nav className="w-full flex gap-3 overflow-x-auto no-scrollbar mt-4 pb-1">
+          {/* BARRA DE CATEGORÍAS SUPERIOR */}
+          <nav className="w-full flex gap-3 overflow-x-auto no-scrollbar mt-4 pb-1 scroll-smooth">
             {categorias?.map((cat) => (
               <a
                 key={cat.id}
                 href={`#cat-${cat.id}`}
-                className="whitespace-nowrap px-4 py-2 rounded-full text-xs font-bold border border-white/10 bg-white/5 active:scale-95 transition-all scroll-smooth"
-                style={{ activeBorderColor: acentoNeon }}
+                className="whitespace-nowrap px-4 py-2 rounded-full text-xs font-bold border border-white/10 bg-white/5 active:scale-95 transition-all hover:border-cyan-400"
               >
                 {cat.nombre}
               </a>
@@ -103,7 +108,7 @@ export default async function MenuPage({ params }: PageProps) {
                         <p className="text-xs text-zinc-400 mt-1 line-clamp-2 leading-relaxed">{prod.descripcion}</p>
                       )}
                       <span className="text-lg font-extrabold block mt-3" style={{ color: acentoNeon }}>
-                        ${Number(prod.precio).toLocaleString('es-AR')}
+                        ${padding_precio(prod.precio)}
                       </span>
                     </div>
 
@@ -138,4 +143,10 @@ export default async function MenuPage({ params }: PageProps) {
       </div>
     </div>
   )
+}
+
+// Función auxiliar simple para formatear el precio sin romper tipos de datos numéricos o strings de Supabase
+function padding_precio(precio: any): string {
+  const num = Number(precio)
+  return isNaN(num) ? "0" : num.toLocaleString('es-AR')
 }
