@@ -1,16 +1,19 @@
 import { supabaseAdmin } from "@/lib/supabase"
 import { notFound } from "next/navigation"
 
-// Corregimos el tipado estricto para Next.js App Router
+// Tipo estricto oficial de Next.js para páginas dinámicas con múltiples niveles de parámetros
 interface PageProps {
-  params: Promise<Record<string, string | string[] | undefined>>
+  params: Promise<{
+    subdomain: string
+    vista: string
+  }>
 }
 
-export default async function MenuPage(props: PageProps) {
-  // Desempaquetamos los params de forma asíncrona cumpliendo la regla de Next.js
-  const resolvedParams = await props.params
-  const subdomain = typeof resolvedParams?.subdomain === "string" ? resolvedParams.subdomain : ""
-  const vista = typeof resolvedParams?.vista === "string" ? resolvedParams.vista : ""
+export default async function MenuPage({ params }: PageProps) {
+  // Desempaquetamos los params usando el await obligatorio del App Router moderno
+  const resolvedParams = await params
+  const subdomain = resolvedParams.subdomain
+  const vista = resolvedParams.vista
 
   // 1. Validamos la URL. Si entran a algo que no sea /menu o /catalogo, tiramos 404
   if (vista !== "menu" && vista !== "catalogo") {
@@ -144,7 +147,7 @@ export default async function MenuPage(props: PageProps) {
   )
 }
 
-// Función para formatear el precio de manera segura
+// Función auxiliar para formatear el precio sin romper tipos de datos
 function padding_precio(precio: any): string {
   const num = Number(precio)
   return isNaN(num) ? "0" : num.toLocaleString('es-AR')
