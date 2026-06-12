@@ -5,10 +5,16 @@ export function middleware(request: NextRequest) {
   const url = request.nextUrl.clone()
   const hostname = request.headers.get('host') || ''
 
-  // 1. Definimos los dominios raíz del sistema (tu dominio real de Vercel)
-  const ROOT_DOMAINS = ['localhost:3000', 'debotz.vercel.app']
+  // 1. Si es la raíz pura de Vercel o localhost, pasa directo sin tocar nada
+  if (
+    hostname === 'debotz.vercel.app' || 
+    hostname === 'localhost:3000' ||
+    hostname.startsWith('debot-git-main') // Ignora dominios de preview de Vercel
+  ) {
+    return NextResponse.next()
+  }
 
-  // 2. Filtro de seguridad: Ignorar archivos estáticos, imágenes, API y bundles de Next
+  // 2. Filtro estricto: Ignorar archivos del sistema, assets y APIs
   if (
     url.pathname.startsWith('/_next') ||
     url.pathname.startsWith('/api') ||
@@ -17,41 +23,26 @@ export function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // 3. Extraer el subdominio dinámicamente limpiando la extensión de Vercel
+  // 3. Extraer el subdominio de forma segura
   let subdomain = ''
-  
-  if (hostname.includes('vercel.app')) {
-    // Si entran a 'pablo.debotz.vercel.app', limpia '.vercel.app' -> queda 'pablo.debotz'
-    const currentHost = hostname.replace('.vercel.app', '')
-    const parts = currentHost.split('.')
-    
-    // Si tiene más de una parte (ej: 'pablo' y 'debotz'), la primera es el inquilino/subdominio
-    if (parts.length > 1) {
-      subdomain = parts[0]
-    }
+  if (hostname.includes('debotz.vercel.app')) {
+    subdomain = hostname.replace('.debotz.vercel.app', '')
   } else {
-    // Lógica para cuando le metas un dominio propio definitivo en el futuro
     const parts = hostname.split('.')
-    if (parts.length > 1 && !ROOT_DOMAINS.includes(hostname)) {
-      subdomain = parts[0]
-    }
+    if (parts.length > 1) subdomain = parts[0]
   }
 
-  // 4. Si el subdominio existe y NO es el dominio principal ('debotz'), reescribimos la ruta hacia la carpeta dinámica
-  if (subdomain && subdomain !== 'debotz' && !ROOT_DOMAINS.includes(hostname)) {
+  // 4. Si hay un subdominio válido, reescribimos la ruta hacia la carpeta interna
+  if (subdomain && subdomain !== 'www') {
     url.pathname = `/[subdomain]${url.pathname}`
     return NextResponse.rewrite(url)
   }
 
-  // Si es la raíz pura (debotz.vercel.app), pasa directo a la página principal sin alterar la URL
   return NextResponse.next()
 }
 
 export const config = {
   matcher: [
-    /*
-     * Ejecuta el middleware en todas las rutas excepto archivos estáticos del sistema
-     */
     '/((?!_next/static|_next/image|favicon.ico).*)',
   ],
 }
