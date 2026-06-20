@@ -1,10 +1,8 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { createBrowserClient } from '@supabase/ssr'
 import { useRouter, useParams } from 'next/navigation'
-
-// ─── Types ───────────────────────────────────────────────────────────────────
 
 interface Local {
   id: string
@@ -43,8 +41,6 @@ interface Sesion {
   clientes: { nombre: string; telefono: string } | null
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
 function formatPrecio(n: number) {
   return n.toLocaleString('es-AR')
 }
@@ -72,10 +68,11 @@ const ESTADO_COMANDA_COLOR: Record<string, string> = {
   entregado: '#10B981',
 }
 
-// ─── Main Component ──────────────────────────────────────────────────────────
-
 export default function DashboardPage() {
-  const supabase = createClientComponentClient()
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
   const router = useRouter()
   const params = useParams()
   const subdomain = params?.subdomain as string
@@ -90,7 +87,6 @@ export default function DashboardPage() {
   const [updatingProducto, setUpdatingProducto] = useState<string | null>(null)
   const [updatingSesion, setUpdatingSesion] = useState<string | null>(null)
 
-  // ── Auth check + load ──
   const cargarDatos = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
@@ -98,7 +94,6 @@ export default function DashboardPage() {
       return
     }
 
-    // Local
     const { data: localData } = await supabase
       .from('locales')
       .select('id, nombre_comercial, color_primario, color_acento, bot_activo, subdominio')
@@ -111,17 +106,14 @@ export default function DashboardPage() {
     }
     setLocal(localData)
 
-    // Productos con categoría
     const { data: prodsData } = await supabase
       .from('productos')
       .select('id, nombre, precio, disponible, categoria_id, categorias(nombre)')
       .eq('local_id', localData.id)
-      .order('categorias(nombre)', { ascending: true })
       .order('nombre', { ascending: true })
 
     setProductos((prodsData as Producto[]) || [])
 
-    // Pedidos activos del día (los que no están entregados)
     const hoy = new Date()
     hoy.setHours(0, 0, 0, 0)
     const { data: pedidosData } = await supabase
@@ -134,7 +126,6 @@ export default function DashboardPage() {
 
     setPedidos((pedidosData as unknown as Pedido[]) || [])
 
-    // Sesiones activas
     const { data: sesionesData } = await supabase
       .from('sesiones_chat')
       .select('id, bot_bloqueado, requiere_atencion_humana, updated_at, clientes(nombre, telefono)')
@@ -144,13 +135,12 @@ export default function DashboardPage() {
 
     setSesiones((sesionesData as unknown as Sesion[]) || [])
     setLoading(false)
-  }, [supabase, router, subdomain])
+  }, [subdomain])
 
   useEffect(() => {
     cargarDatos()
   }, [cargarDatos])
 
-  // ── Realtime pedidos ──
   useEffect(() => {
     if (!local) return
     const channel = supabase
@@ -163,73 +153,49 @@ export default function DashboardPage() {
       }, () => { cargarDatos() })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
-  }, [local, supabase, cargarDatos])
+  }, [local, cargarDatos])
 
-  // ── Toggle bot activo ──
   async function toggleBot() {
     if (!local || updatingBot) return
     setUpdatingBot(true)
     const nuevoEstado = !local.bot_activo
-    await supabase
-      .from('locales')
-      .update({ bot_activo: nuevoEstado, updated_at: new Date().toISOString() })
-      .eq('id', local.id)
+    await supabase.from('locales').update({ bot_activo: nuevoEstado }).eq('id', local.id)
     setLocal(prev => prev ? { ...prev, bot_activo: nuevoEstado } : prev)
     setUpdatingBot(false)
   }
 
-  // ── Toggle disponibilidad producto ──
   async function toggleProducto(prod: Producto) {
     if (updatingProducto) return
     setUpdatingProducto(prod.id)
     const nuevo = !prod.disponible
-    await supabase
-      .from('productos')
-      .update({ disponible: nuevo })
-      .eq('id', prod.id)
-    setProductos(prev =>
-      prev.map(p => p.id === prod.id ? { ...p, disponible: nuevo } : p)
-    )
+    await supabase.from('productos').update({ disponible: nuevo }).eq('id', prod.id)
+    setProductos(prev => prev.map(p => p.id === prod.id ? { ...p, disponible: nuevo } : p))
     setUpdatingProducto(null)
   }
 
-  // ── Toggle bot_bloqueado en sesión ──
   async function toggleBotBloqueado(sesion: Sesion) {
     if (updatingSesion) return
     setUpdatingSesion(sesion.id)
     const nuevo = !sesion.bot_bloqueado
-    await supabase
-      .from('sesiones_chat')
-      .update({ bot_bloqueado: nuevo })
-      .eq('id', sesion.id)
-    setSesiones(prev =>
-      prev.map(s => s.id === sesion.id ? { ...s, bot_bloqueado: nuevo } : s)
-    )
+    await supabase.from('sesiones_chat').update({ bot_bloqueado: nuevo }).eq('id', sesion.id)
+    setSesiones(prev => prev.map(s => s.id === sesion.id ? { ...s, bot_bloqueado: nuevo } : s))
     setUpdatingSesion(null)
   }
 
-  // ── Avanzar estado comanda ──
   async function avanzarEstado(pedido: Pedido) {
     const orden = ['recibido', 'en_cocina', 'en_camino', 'entregado']
     const idx = orden.indexOf(pedido.estado_comanda)
     if (idx === -1 || idx === orden.length - 1) return
     const siguiente = orden[idx + 1]
-    await supabase
-      .from('pedidos')
-      .update({ estado_comanda: siguiente })
-      .eq('id', pedido.id)
-    setPedidos(prev =>
-      prev.map(p => p.id === pedido.id ? { ...p, estado_comanda: siguiente } : p)
-    )
+    await supabase.from('pedidos').update({ estado_comanda: siguiente }).eq('id', pedido.id)
+    setPedidos(prev => prev.map(p => p.id === pedido.id ? { ...p, estado_comanda: siguiente } : p))
   }
 
-  // ── Logout ──
   async function handleLogout() {
     await supabase.auth.signOut()
     router.push(`/${subdomain}/admin`)
   }
 
-  // ── Imprimir comanda ──
   function imprimirComanda(pedido: Pedido) {
     const ventana = window.open('', '_blank', 'width=380,height=600')
     if (!ventana) return
@@ -237,42 +203,25 @@ export default function DashboardPage() {
     const itemsHtml = items.map(i =>
       `<tr><td>${i.cantidad}x ${i.nombre}</td><td style="text-align:right">$${formatPrecio(i.precio * i.cantidad)}</td></tr>`
     ).join('')
-    ventana.document.write(`
-      <!DOCTYPE html><html><head>
-      <meta charset="utf-8">
-      <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Courier New', monospace; font-size: 13px; padding: 16px; max-width: 320px; }
-        h1 { font-size: 18px; font-weight: bold; text-align: center; margin-bottom: 4px; }
-        .sub { text-align: center; color: #555; font-size: 11px; margin-bottom: 16px; }
-        .sep { border-top: 1px dashed #000; margin: 10px 0; }
-        table { width: 100%; border-collapse: collapse; }
-        td { padding: 3px 0; vertical-align: top; }
-        .total { font-size: 16px; font-weight: bold; margin-top: 8px; display: flex; justify-content: space-between; }
-        .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; margin-top: 4px; background: #eee; }
-        .footer { text-align: center; color: #888; font-size: 10px; margin-top: 16px; }
-      </style>
+    ventana.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
+      <style>* { margin:0; padding:0; box-sizing:border-box; } body { font-family:'Courier New',monospace; font-size:13px; padding:16px; max-width:320px; } h1 { font-size:18px; font-weight:bold; text-align:center; margin-bottom:4px; } .sub { text-align:center; color:#555; font-size:11px; margin-bottom:16px; } .sep { border-top:1px dashed #000; margin:10px 0; } table { width:100%; border-collapse:collapse; } td { padding:3px 0; vertical-align:top; } .total { font-size:16px; font-weight:bold; margin-top:8px; display:flex; justify-content:space-between; } .footer { text-align:center; color:#888; font-size:10px; margin-top:16px; }</style>
       </head><body>
-      <h1>Sushi Blue</h1>
-      <p class="sub">Comanda #${pedido.id.slice(-6).toUpperCase()}</p>
+      <h1>${pedido.clientes?.nombre || 'Comanda'}</h1>
+      <p class="sub">#${pedido.id.slice(-6).toUpperCase()} — ${new Date(pedido.created_at).toLocaleTimeString('es-AR')}</p>
       <div class="sep"></div>
-      <p><strong>Cliente:</strong> ${pedido.clientes?.nombre || 'Sin nombre'}</p>
-      <p><strong>Tel:</strong> ${pedido.clientes?.telefono || '-'}</p>
       <p><strong>Tipo:</strong> ${pedido.tipo_entrega === 'delivery' ? 'Delivery' : 'Takeaway'}</p>
+      <p><strong>Tel:</strong> ${pedido.clientes?.telefono || '-'}</p>
       <p><strong>Pago:</strong> ${pedido.estado_pago}</p>
       <div class="sep"></div>
       <table>${itemsHtml}</table>
       <div class="sep"></div>
       <div class="total"><span>TOTAL</span><span>$${formatPrecio(pedido.total)}</span></div>
       <p class="footer">Impreso ${new Date().toLocaleTimeString('es-AR')}</p>
-      </body></html>
-    `)
+      </body></html>`)
     ventana.document.close()
     ventana.focus()
     setTimeout(() => ventana.print(), 300)
   }
-
-  // ─── Render ────────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
@@ -286,14 +235,14 @@ export default function DashboardPage() {
 
   if (!local) return null
 
-  const acento = local.color_acento || '#00D2FF'
+  const acento = local.color_acento ? `#${local.color_acento}` : '#00D2FF'
   const totalFacturado = pedidos.reduce((acc, p) => acc + (p.total || 0), 0)
   const sesionesConAlerta = sesiones.filter(s => s.requiere_atencion_humana)
 
   return (
     <div className="min-h-screen bg-[#030B1E] text-white font-sans">
 
-      {/* ── HEADER ── */}
+      {/* HEADER */}
       <header className="sticky top-0 z-50 bg-[#030B1E]/95 backdrop-blur-md border-b border-white/10">
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
           <div>
@@ -303,7 +252,6 @@ export default function DashboardPage() {
             <p className="text-[10px] text-zinc-500 uppercase tracking-widest">Panel Admin</p>
           </div>
           <div className="flex items-center gap-3">
-            {/* Bot toggle */}
             <button
               onClick={toggleBot}
               disabled={updatingBot}
@@ -314,22 +262,20 @@ export default function DashboardPage() {
                 color: local.bot_activo ? acento : '#71717a',
               }}
             >
-              <span className={`w-2 h-2 rounded-full ${local.bot_activo ? 'animate-pulse' : ''}`}
-                style={{ backgroundColor: local.bot_activo ? acento : '#52525b' }} />
+              <span
+                className={`w-2 h-2 rounded-full ${local.bot_activo ? 'animate-pulse' : ''}`}
+                style={{ backgroundColor: local.bot_activo ? acento : '#52525b' }}
+              />
               {updatingBot ? '...' : local.bot_activo ? 'Bot activo' : 'Bot pausado'}
             </button>
-
-            <button
-              onClick={handleLogout}
-              className="text-zinc-600 hover:text-zinc-400 text-xs transition-colors"
-            >
+            <button onClick={handleLogout} className="text-zinc-600 hover:text-zinc-400 text-xs transition-colors">
               Salir
             </button>
           </div>
         </div>
       </header>
 
-      {/* ── MÉTRICAS RÁPIDAS ── */}
+      {/* MÉTRICAS */}
       <div className="max-w-2xl mx-auto px-4 pt-5 pb-3">
         <div className="grid grid-cols-3 gap-3">
           {[
@@ -345,7 +291,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ── TABS ── */}
+      {/* TABS */}
       <div className="max-w-2xl mx-auto px-4 mb-4">
         <div className="flex gap-1 bg-white/[0.03] border border-white/5 rounded-2xl p-1">
           {(['stock', 'pedidos', 'conversaciones'] as const).map(t => (
@@ -353,40 +299,30 @@ export default function DashboardPage() {
               key={t}
               onClick={() => setTab(t)}
               className="flex-1 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all"
-              style={tab === t
-                ? { backgroundColor: acento, color: '#030B1E' }
-                : { color: '#71717a' }
-              }
+              style={tab === t ? { backgroundColor: acento, color: '#030B1E' } : { color: '#71717a' }}
             >
               {t === 'stock' ? 'Stock' : t === 'pedidos' ? 'Pedidos' : 'Chats'}
               {t === 'pedidos' && pedidos.length > 0 && (
-                <span className="ml-1.5 bg-white/20 px-1.5 py-0.5 rounded-full text-[10px]">
-                  {pedidos.length}
-                </span>
+                <span className="ml-1.5 bg-white/20 px-1.5 py-0.5 rounded-full text-[10px]">{pedidos.length}</span>
               )}
               {t === 'conversaciones' && sesionesConAlerta.length > 0 && (
-                <span className="ml-1.5 bg-red-500/80 px-1.5 py-0.5 rounded-full text-[10px] text-white">
-                  {sesionesConAlerta.length}
-                </span>
+                <span className="ml-1.5 bg-red-500/80 px-1.5 py-0.5 rounded-full text-[10px] text-white">{sesionesConAlerta.length}</span>
               )}
             </button>
           ))}
         </div>
       </div>
 
-      {/* ── CONTENIDO ── */}
       <main className="max-w-2xl mx-auto px-4 pb-24">
 
-        {/* ─── TAB: STOCK ─── */}
+        {/* STOCK */}
         {tab === 'stock' && (
           <div className="flex flex-col gap-3">
             <p className="text-xs text-zinc-500 uppercase tracking-widest font-bold mb-1">
-              Disponibilidad de productos — tocá para activar/desactivar
+              Tocá para activar o desactivar productos
             </p>
             {productos.length === 0 && (
-              <div className="text-zinc-600 text-sm text-center py-8">
-                No hay productos cargados.
-              </div>
+              <p className="text-zinc-600 text-sm text-center py-8">No hay productos cargados.</p>
             )}
             {productos.map(prod => (
               <div
@@ -399,7 +335,7 @@ export default function DashboardPage() {
                     {prod.nombre}
                   </p>
                   <p className="text-xs text-zinc-500 mt-0.5">
-                    {prod.categorias?.nombre} &mdash; ${formatPrecio(prod.precio)}
+                    {prod.categorias?.nombre} — ${formatPrecio(prod.precio)}
                   </p>
                 </div>
                 <button
@@ -418,16 +354,14 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* ─── TAB: PEDIDOS ─── */}
+        {/* PEDIDOS */}
         {tab === 'pedidos' && (
           <div className="flex flex-col gap-4">
             <p className="text-xs text-zinc-500 uppercase tracking-widest font-bold mb-1">
               Pedidos activos de hoy
             </p>
             {pedidos.length === 0 && (
-              <div className="text-zinc-600 text-sm text-center py-8">
-                No hay pedidos activos por el momento.
-              </div>
+              <p className="text-zinc-600 text-sm text-center py-8">No hay pedidos activos.</p>
             )}
             {pedidos.map(pedido => {
               const items = Array.isArray(pedido.items) ? pedido.items : []
@@ -435,21 +369,15 @@ export default function DashboardPage() {
               const labelEstado = ESTADO_COMANDA_LABEL[pedido.estado_comanda] || pedido.estado_comanda
               const orden = ['recibido', 'en_cocina', 'en_camino', 'entregado']
               const idx = orden.indexOf(pedido.estado_comanda)
-              const puedaAvanzar = idx < orden.length - 1
+              const puedeAvanzar = idx < orden.length - 1
 
               return (
-                <div
-                  key={pedido.id}
-                  className="bg-white/[0.03] border border-white/5 rounded-2xl p-4"
-                >
-                  {/* Header pedido */}
+                <div key={pedido.id} className="bg-white/[0.03] border border-white/5 rounded-2xl p-4">
                   <div className="flex items-start justify-between mb-3">
                     <div>
-                      <p className="text-sm font-black text-zinc-100">
-                        {pedido.clientes?.nombre || 'Cliente'}
-                      </p>
+                      <p className="text-sm font-black text-zinc-100">{pedido.clientes?.nombre || 'Cliente'}</p>
                       <p className="text-xs text-zinc-500">
-                        {pedido.tipo_entrega === 'delivery' ? '📦 Delivery' : '🏃 Takeaway'} &mdash; {timeAgo(pedido.created_at)}
+                        {pedido.tipo_entrega === 'delivery' ? '📦 Delivery' : '🏃 Takeaway'} — {timeAgo(pedido.created_at)}
                       </p>
                     </div>
                     <span
@@ -460,7 +388,6 @@ export default function DashboardPage() {
                     </span>
                   </div>
 
-                  {/* Items */}
                   <div className="flex flex-col gap-1 mb-3">
                     {items.map((item, i) => (
                       <div key={i} className="flex justify-between text-xs">
@@ -470,7 +397,6 @@ export default function DashboardPage() {
                     ))}
                   </div>
 
-                  {/* Total + acciones */}
                   <div className="flex items-center justify-between border-t border-white/5 pt-3 gap-2">
                     <span className="text-base font-black" style={{ color: acento }}>
                       ${formatPrecio(pedido.total)}
@@ -482,7 +408,7 @@ export default function DashboardPage() {
                       >
                         Imprimir
                       </button>
-                      {puedaAvanzar && (
+                      {puedeAvanzar && (
                         <button
                           onClick={() => avanzarEstado(pedido)}
                           className="text-xs font-black px-3 py-1.5 rounded-xl transition-all active:scale-95"
@@ -499,16 +425,14 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* ─── TAB: CONVERSACIONES ─── */}
+        {/* CONVERSACIONES */}
         {tab === 'conversaciones' && (
           <div className="flex flex-col gap-3">
             <p className="text-xs text-zinc-500 uppercase tracking-widest font-bold mb-1">
-              Conversaciones activas — bloqueá el bot para responder vos
+              Bloqueá el bot para responder manualmente
             </p>
             {sesiones.length === 0 && (
-              <div className="text-zinc-600 text-sm text-center py-8">
-                No hay conversaciones activas.
-              </div>
+              <p className="text-zinc-600 text-sm text-center py-8">No hay conversaciones activas.</p>
             )}
             {sesiones.map(sesion => (
               <div
@@ -517,9 +441,7 @@ export default function DashboardPage() {
                 style={{
                   borderColor: sesion.requiere_atencion_humana
                     ? '#EF444430'
-                    : sesion.bot_bloqueado
-                      ? `${acento}25`
-                      : '#ffffff08'
+                    : sesion.bot_bloqueado ? `${acento}25` : '#ffffff08'
                 }}
               >
                 <div className="flex-1 min-w-0 pr-3">
@@ -529,12 +451,12 @@ export default function DashboardPage() {
                     </p>
                     {sesion.requiere_atencion_humana && (
                       <span className="text-[10px] bg-red-500/20 text-red-400 font-bold px-2 py-0.5 rounded-full flex-shrink-0">
-                        Alerta
+                        ⚠️ Alerta
                       </span>
                     )}
                   </div>
                   <p className="text-xs text-zinc-500 mt-0.5">
-                    {sesion.clientes?.telefono || '-'} &mdash; {timeAgo(sesion.updated_at)}
+                    {sesion.clientes?.telefono || '-'} — {timeAgo(sesion.updated_at)}
                   </p>
                   <p className="text-xs mt-0.5" style={{ color: sesion.bot_bloqueado ? acento : '#52525b' }}>
                     {sesion.bot_bloqueado ? '🔴 Modo manual activo' : '🤖 Bot respondiendo'}
