@@ -50,7 +50,10 @@ export default function AdminLoginPage() {
     }
 
     // Verificamos que el subdominio coincide con el local del usuario
-    const localSubdominio = (adminUser.locales as { subdominio: string } | null)?.subdominio
+    const localesRaw = adminUser.locales as unknown
+const localSubdominio = Array.isArray(localesRaw)
+  ? (localesRaw[0] as { subdominio: string } | undefined)?.subdominio
+  : (localesRaw as { subdominio: string } | null)?.subdominio
     if (localSubdominio !== subdomain) {
       setError('No tenés acceso a este local.')
       await supabase.auth.signOut()
