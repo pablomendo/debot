@@ -196,7 +196,7 @@ export default function MenuPage() {
       const precio = item.producto.precio + (item.opcionSeleccionada?.precio || 0)
       const variante = item.opcionSeleccionada ? ` (${item.opcionSeleccionada.nombre})` : ''
       msg += `• ${item.cantidad}x ${item.producto.nombre}${variante} — $${(precio * item.cantidad).toLocaleString()}\n`
-      if (item.notes) msg += `   _Nota: ${item.notes}_\n`
+      if (item.notas) msg += `   _Nota: ${item.notas}_\n`
     })
     msg += `\n💰 *Total: $${totalCarrito.toLocaleString()}*\n`
     msg += `💳 *Pago:* ${metodoPago === 'efectivo' ? `Efectivo${pagaCon ? ` (paga con $${pagaCon})` : ''}` : metodoPago === 'transferencia' ? `Transferencia (${local.alias_transferencia || 'alias a confirmar'})` : 'Mercado Pago'}\n`
@@ -310,7 +310,7 @@ export default function MenuPage() {
               <div key={f.label}>
                 <label className="text-xs font-bold uppercase tracking-widest mb-1.5 block text-zinc-500">{f.label}</label>
                 <input type={f.type} value={f.value} onChange={e => f.set(e.target.value)} placeholder={f.placeholder}
-                  className="w-full rounded-xl px-4 py-3 bg-zinc-50 text-zinc-900 border border-zinc-300 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-400 transition-all" />
+                  className="w-full rounded-xl px-4 py-3 bg-zinc-50 text-zinc-900 border border-zinc-300 text-sm placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-zinc-400 transition-all" />
               </div>
             ))}
           </div>
@@ -623,7 +623,7 @@ export default function MenuPage() {
                       </div>
                       <div className="flex items-center gap-2 mt-1">
                         <button onClick={() => quitarDelCarrito(item.producto, item.opcionSeleccionada)} className="w-5 h-5 rounded bg-zinc-200 flex items-center justify-center font-bold text-xs hover:bg-zinc-300">−</button>
-                        <span className="text-xs font-bold w-4 text-center text-zinc-800">{item.text || item.cantidad}</span>
+                        <span className="text-xs font-bold w-4 text-center text-zinc-800">{item.cantidad}</span>
                         <button onClick={() => agregarAlCarrito(item.producto, item.opcionSeleccionada)} className="w-5 h-5 rounded bg-zinc-200 flex items-center justify-center font-bold text-xs hover:bg-zinc-300">+</button>
                       </div>
                     </div>
