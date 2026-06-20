@@ -112,7 +112,7 @@ export default function DashboardPage() {
       .eq('local_id', localData.id)
       .order('nombre', { ascending: true })
 
-    setProductos((prodsData as Producto[]) || [])
+      setProductos((prodsData as unknown as Producto[]) || [])
 
     const hoy = new Date()
     hoy.setHours(0, 0, 0, 0)
