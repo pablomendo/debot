@@ -426,7 +426,7 @@ async function enviarMensajeWA(para: string, texto: string, numeroLocal: string)
     return
   }
 
-  await fetch(`https://graph.facebook.com/v19.0/${phoneNumberId}/messages`, {
+  await fetch(`https://graph.facebook.com/v20.0/${phoneNumberId}/messages`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${accessToken}`,
