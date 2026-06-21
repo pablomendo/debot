@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (!local) {
-      console.error('Local no encontrado para número:', numeroLocal)
+      console.error('Local no encontrado. numeroLocal recibido de Meta:', numeroLocal, '| numeroCliente:', numeroCliente)
       return NextResponse.json({ status: 'local_no_encontrado' })
     }
 
@@ -426,7 +426,7 @@ async function enviarMensajeWA(para: string, texto: string, numeroLocal: string)
     return
   }
 
-  await fetch(`https://graph.facebook.com/v20.0/${phoneNumberId}/messages`, {
+  const res = await fetch(`https://graph.facebook.com/v20.0/${phoneNumberId}/messages`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${accessToken}`,
@@ -440,4 +440,16 @@ async function enviarMensajeWA(para: string, texto: string, numeroLocal: string)
       text: { body: texto },
     }),
   })
+
+  const responseBody = await res.json().catch(() => null)
+
+  if (!res.ok) {
+    console.error('❌ Meta rechazó el envío del mensaje:', {
+      status: res.status,
+      to: para,
+      body: responseBody,
+    })
+  } else {
+    console.log('✅ Meta confirmó el envío:', responseBody)
+  }
 }
