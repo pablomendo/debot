@@ -423,6 +423,9 @@ async function enviarMensajeWA(para: string, texto: string, numeroLocal: string)
 
   if (!accessToken || !phoneNumberId || accessToken === 'placeholder') {
     console.log('META no configurado. Mensaje que se enviaría:', { para, texto })
+    await supabase.from('debug_logs').insert([{
+      mensaje: 'META no configurado (faltan variables de entorno). Para: ' + para,
+    }])
     return
   }
 
@@ -443,12 +446,13 @@ async function enviarMensajeWA(para: string, texto: string, numeroLocal: string)
 
   const responseBody = await res.json().catch(() => null)
 
+  // Guardamos el resultado en Supabase para verlo fácil en el Table Editor
+  await supabase.from('debug_logs').insert([{
+    mensaje: JSON.stringify({ ok: res.ok, status: res.status, to: para, body: responseBody }, null, 2),
+  }])
+
   if (!res.ok) {
-    console.error('❌ Meta rechazó el envío del mensaje:', {
-      status: res.status,
-      to: para,
-      body: responseBody,
-    })
+    console.error('❌ Meta rechazó el envío del mensaje:', { status: res.status, to: para, body: responseBody })
   } else {
     console.log('✅ Meta confirmó el envío:', responseBody)
   }
